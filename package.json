@@ -1,0 +1,16 @@
+{
+  "name": "vk-sample-request-portal",
+  "version": "1.0.0",
+  "description": "V&K Sample Request Portal: form, admin dashboard, and email templates, backed by a small Node/Express API.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.22.2",
+    "nodemailer": "^6.9.14"
+  }
+}
