@@ -90,44 +90,72 @@ function escapeHtml(value) {
 
 // Matches the "Email Templates" preview shown inside the app itself, so the
 // real email that lands in an inbox looks the same as what's previewed there.
+//
+// Built as nested tables (not divs) with the font-family and font-size
+// repeated on every single cell, rather than relying on inheritance from an
+// outer wrapper. Gmail and other webmail clients often ignore inherited
+// font styles inside a <table>, which is why the first version of this email
+// showed up in a plain serif font at the wrong size, this rewrite sets it
+// explicitly everywhere so it renders consistently.
 function buildNotificationHtml(req) {
+  const FONT = 'font-family:Arial, Helvetica, sans-serif;';
   const money = (n) => '$' + Number(n || 0).toLocaleString();
   const dateStr = new Date(req.date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
+  const row = (label, value, bold) => `
+    <tr>
+      <td style="${FONT} padding:9px 0; font-size:15px; color:#6b6a66; width:150px; vertical-align:top;">${label}</td>
+      <td style="${FONT} padding:9px 0; font-size:15px; color:#1c1c1c; font-weight:${bold ? '700' : '400'}; vertical-align:top;">${value}</td>
+    </tr>`;
+
   const vendorRows = (req.vendors || []).map((v) => {
     const items = (v.items || []).map(escapeHtml).join(', ') || 'N/A';
-    const desc = v.desc ? `<br><span style="color:#898781; font-size:12px;">${escapeHtml(v.desc)}</span>` : '';
-    return `<tr><td style="padding:6px 0; color:#52514e; width:150px; vertical-align:top;">${escapeHtml(v.name)}</td><td style="padding:6px 0; vertical-align:top;">${items}${desc}</td></tr>`;
+    const desc = v.desc ? `<br><span style="${FONT} color:#898781; font-size:13px;">${escapeHtml(v.desc)}</span>` : '';
+    return row(escapeHtml(v.name), items + desc, false);
   }).join('');
 
+  const leadBadge = `<span style="${FONT} display:inline-block; background:${req.lead ? '#e3f6f1' : '#eef0f2'}; color:${req.lead ? '#0d8a79' : '#7a7873'}; font-size:12px; font-weight:700; padding:4px 11px; border-radius:999px;">${req.lead ? 'YES' : 'NO'}</span>`;
+
   return `
-  <div style="font-family:Arial, Helvetica, sans-serif; max-width:600px; margin:0 auto; border:1px solid #e1e0d9; border-radius:10px; overflow:hidden;">
-    <div style="background:linear-gradient(135deg,#0f2438,#16324a); padding:24px 32px 28px;">
-      <img src="cid:ngrlogo" alt="New Generation Reps" style="height:30px; display:block; margin-bottom:14px;" />
-      <div style="font-size:11px; letter-spacing:1px; text-transform:uppercase; color:#7fd8c9; font-weight:700;">V&amp;K Sample Portal</div>
-      <div style="font-size:20px; font-weight:800; margin-top:6px; color:#fff;">A new sample request just came in</div>
-      <div style="font-size:13px; color:rgba(255,255,255,0.75); margin-top:4px;">Submitted by ${escapeHtml(req.rep)} on ${dateStr}</div>
-    </div>
-    <div style="padding:26px 32px; background:#fff;">
-      <table style="width:100%; font-size:13.5px; border-collapse:collapse;">
-        <tr><td style="padding:6px 0; color:#52514e; width:150px;">Request ID</td><td style="padding:6px 0; font-weight:700;">${escapeHtml(req.id)}</td></tr>
-        <tr><td style="padding:6px 0; color:#52514e;">Customer</td><td style="padding:6px 0; font-weight:700;">${escapeHtml(req.customer)}</td></tr>
-        <tr><td style="padding:6px 0; color:#52514e;">Project</td><td style="padding:6px 0;">${escapeHtml(req.project)}</td></tr>
-        <tr><td style="padding:6px 0; color:#52514e;">Segment</td><td style="padding:6px 0;">${escapeHtml(req.segment)}</td></tr>
-        <tr><td style="padding:6px 0; color:#52514e;">Amount</td><td style="padding:6px 0; font-weight:700;">${money(req.amount)}</td></tr>
-        <tr><td style="padding:6px 0; color:#52514e;">Needed By</td><td style="padding:6px 0;">${escapeHtml(req.neededBy)}</td></tr>
-        <tr><td style="padding:6px 0; color:#52514e;">Ship To</td><td style="padding:6px 0;">${escapeHtml(req.address)}</td></tr>
-        <tr><td style="padding:6px 0; color:#52514e;">Attention To</td><td style="padding:6px 0;">${escapeHtml(req.attn)}</td></tr>
-        <tr><td style="padding:6px 0; color:#52514e; vertical-align:top;">Add to Lead</td><td style="padding:6px 0;"><span style="background:${req.lead ? '#e3f6f1' : '#eef0f2'}; color:${req.lead ? '#0d8a79' : '#898781'}; font-size:11px; font-weight:700; padding:3px 9px; border-radius:999px;">${req.lead ? 'YES' : 'NO'}</span></td></tr>
-      </table>
-      <div style="margin-top:18px; font-size:12px; letter-spacing:0.5px; text-transform:uppercase; color:#898781; font-weight:700;">Vendors &amp; Items</div>
-      <table style="width:100%; font-size:13.5px; border-collapse:collapse; margin-top:6px;">
-        ${vendorRows}
-      </table>
-      ${req.notes ? `<div style="margin-top:18px; font-size:13px; color:#52514e;"><b>Notes:</b> ${escapeHtml(req.notes)}</div>` : ''}
-    </div>
-    <div style="padding:14px 32px; background:#f7f8fa; font-size:11.5px; color:#898781; border-top:1px solid #e1e0d9;">This is an automated notification from the V&amp;K Sample Request Portal.</div>
-  </div>`;
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="${FONT} background:#f2f3f5; padding:26px 12px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="${FONT} width:600px; max-width:600px; background:#ffffff; border:1px solid #e1e0d9; border-radius:10px;">
+          <tr>
+            <td style="${FONT} background-color:#132c42; background-image:linear-gradient(135deg,#0f2438,#16324a); padding:28px 34px 32px; border-radius:10px 10px 0 0;">
+              <img src="cid:ngrlogo" alt="New Generation Reps" width="150" style="height:auto; max-height:36px; display:block; margin-bottom:16px; border:0;" />
+              <div style="${FONT} font-size:12px; letter-spacing:1px; text-transform:uppercase; color:#7fd8c9; font-weight:700;">V&amp;K SAMPLE PORTAL</div>
+              <div style="${FONT} font-size:23px; font-weight:800; margin-top:8px; color:#ffffff; line-height:1.35;">A new sample request just came in</div>
+              <div style="${FONT} font-size:14.5px; color:#c9d5df; margin-top:6px;">Submitted by ${escapeHtml(req.rep)} on ${dateStr}</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="${FONT} padding:30px 34px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="${FONT} width:100%;">
+                ${row('Request ID', escapeHtml(req.id), true)}
+                ${row('Customer', escapeHtml(req.customer), true)}
+                ${row('Project', escapeHtml(req.project), false)}
+                ${row('Segment', escapeHtml(req.segment), false)}
+                ${row('Amount', money(req.amount), true)}
+                ${row('Needed By', escapeHtml(req.neededBy), false)}
+                ${row('Ship To', escapeHtml(req.address), false)}
+                ${row('Attention To', escapeHtml(req.attn), false)}
+                ${row('Add to Lead', leadBadge, false)}
+              </table>
+              <div style="${FONT} margin-top:24px; font-size:13px; letter-spacing:0.5px; text-transform:uppercase; color:#898781; font-weight:700;">Vendors &amp; Items</div>
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="${FONT} width:100%; margin-top:6px;">
+                ${vendorRows}
+              </table>
+              ${req.notes ? `<div style="${FONT} margin-top:22px; font-size:14.5px; color:#52514e; line-height:1.5;"><b>Notes:</b> ${escapeHtml(req.notes)}</div>` : ''}
+            </td>
+          </tr>
+          <tr>
+            <td style="${FONT} padding:16px 34px; background:#f7f8fa; font-size:12.5px; color:#898781; border-top:1px solid #e1e0d9; border-radius:0 0 10px 10px;">This is an automated notification from the V&amp;K Sample Request Portal.</td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>`;
 }
 
 function getTransport() {
