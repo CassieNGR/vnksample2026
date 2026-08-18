@@ -161,8 +161,10 @@ automatically the first time a request comes in:
   Vertex China (VC-500)`) so you don't have to open the app to see what's
   on it.
 - **Vendor Items**: one row per vendor on a request, with that vendor's
-  item numbers and any tracking number/ETA/cost/courier link entered for
-  it. This is what you'd filter or sort by item or tracking number.
+  item numbers, its Status (Ordered, Item Not Available, Out of Stock,
+  Backordered, Received, or Cancelled) and Notes set on the dashboard, and
+  any tracking number/ETA/cost/courier link entered for it. This is what
+  you'd filter or sort by item, status, or tracking number.
 
 Tracking info added later on the dashboard (the "Save" button under a
 vendor's shipment entries) updates that request's rows in both tabs too,

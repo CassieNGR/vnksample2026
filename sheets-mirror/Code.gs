@@ -23,8 +23,8 @@ const REQUESTS_HEADERS = [
 const ITEMS_SHEET_NAME = 'Vendor Items';
 const ITEMS_HEADERS = [
   'RequestID', 'Date', 'Customer', 'Project', 'Rep', 'VendorName',
-  'VendorEmail', 'VendorDescription', 'Items', 'TrackingNumbers', 'ETAs',
-  'ShipmentCosts', 'CourierLinks',
+  'VendorEmail', 'VendorDescription', 'Items', 'Status', 'Notes',
+  'TrackingNumbers', 'ETAs', 'ShipmentCosts', 'CourierLinks',
 ];
 
 function getOrCreateSheet_(name, headers) {
@@ -102,6 +102,7 @@ function writeVendorItemRows_(req) {
       req.id, req.date, req.customer, req.project, req.rep,
       v.name || '', v.email || '', v.desc || '',
       (v.items || []).join(', '),
+      v.status || '', v.notes || '',
       shipments.map(s => s.tracking).filter(Boolean).join(', '),
       shipments.map(s => s.eta).filter(Boolean).join(', '),
       shipments.map(s => s.cost).filter(Boolean).join(', '),

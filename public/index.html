@@ -1250,7 +1250,7 @@ function renderLog() {
       dtr.innerHTML = `<td colspan="11"><div class="detail-wrap"><div class="detail-grid">
         <div class="detail-block">
           <h4>Vendors &amp; Items</h4>
-          ${r.vendors.map(v => `<div class="vend-mini"><div class="vname">${v.name}${v.desc?` (${v.desc})`:''}</div>${v.items.map(i=>`<span class="item-pill">${i}</span>`).join('')}</div>`).join('')}
+          ${r.vendors.map(v => `<div class="vend-mini"><div class="vname">${v.name}${v.desc?` (${v.desc})`:''}${v.status ? ` <span class="badge leadyes" style="margin-left:4px;">${v.status}</span>` : ''}</div>${v.items.map(i=>`<span class="item-pill">${i}</span>`).join('')}${v.notes ? `<div style="font-size:12px; color:var(--text-muted); margin-top:4px;">${v.notes}</div>` : ''}</div>`).join('')}
           <h4 style="margin-top:14px;">Request Details</h4>
           <div class="kv"><b>Customer:</b> ${r.customer} &nbsp; | &nbsp; <b>Segment:</b> ${r.segment}</div>
           <div class="kv"><b>Ship To:</b> ${r.address} &nbsp; | &nbsp; <b>Attn:</b> ${r.attn}</div>
@@ -1309,8 +1309,25 @@ function escAttr(s) {
   return String(s ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 }
 
+const VENDOR_STATUS_OPTIONS = ['Ordered', 'Item Not Available', 'Out of Stock', 'Backordered', 'Received', 'Cancelled'];
+
 function renderVendorShipmentBlock(r, v, vi) {
   if (!v.shipments || !v.shipments.length) v.shipments = [{ eta: '', tracking: '', cost: '', courierLink: '' }];
+  const statusBase = `vstat-${r.id}-${vi}`;
+  const statusField = `
+    <div class="ship-form" style="margin-bottom:12px;">
+      <div class="field">
+        <label>Status</label>
+        <select id="${statusBase}-status">
+          <option value="">No status set</option>
+          ${VENDOR_STATUS_OPTIONS.map(o => `<option value="${o}" ${v.status === o ? 'selected' : ''}>${o}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field" style="grid-column: span 2;">
+        <label>Notes</label>
+        <textarea id="${statusBase}-notes" placeholder="e.g. Vendor confirmed 2-week lead time, or item discontinued...">${escAttr(v.notes)}</textarea>
+      </div>
+    </div>`;
   const entries = v.shipments.map((s, si) => {
     const base = `ship-${r.id}-${vi}-${si}`;
     const hasLink = s.courierLink && s.courierLink.trim();
@@ -1338,6 +1355,7 @@ function renderVendorShipmentBlock(r, v, vi) {
   return `
     <div class="vend-ship-block">
       <div class="vend-ship-head"><span class="vend-ship-dot"></span>${v.name}${v.desc ? ` (${v.desc})` : ''}</div>
+      ${statusField}
       ${entries}
       <div class="ship-actions">
         <button class="add-entry-btn" data-addentry="${vi}">+ Add Another Tracking Entry</button>
@@ -1357,6 +1375,9 @@ function captureVendorShipments(r, vi) {
       courierLink: $(`#${base}-link`)?.value || ''
     };
   });
+  const statusBase = `vstat-${r.id}-${vi}`;
+  v.status = $(`#${statusBase}-status`)?.value || '';
+  v.notes = $(`#${statusBase}-notes`)?.value || '';
 }
 
 ['#log-search','#log-status-filter','#log-lead-filter','#log-date-from','#log-date-to'].forEach(sel => {
@@ -1401,7 +1422,9 @@ $('#export-btn').addEventListener('click', () => {
           'Tracking Number(s)': tracking,
           'Courier Tracking Link(s)': courierLink,
           'Shipment Cost (vendor total)': cost || '',
-          'Notes': r.notes
+          'Notes': r.notes,
+          'Vendor Status': v.status || '',
+          'Vendor Notes': v.notes || ''
         });
       });
     });

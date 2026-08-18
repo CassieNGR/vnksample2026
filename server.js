@@ -287,6 +287,8 @@ app.post('/api/requests', async (req, res) => {
       email: v.email || '',
       items: Array.isArray(v.items) ? v.items : [],
       shipments: Array.isArray(v.shipments) && v.shipments.length ? v.shipments : [{ eta: '', tracking: '', cost: '', courierLink: '' }],
+      status: v.status || '',
+      notes: v.notes || '',
     })),
   };
 
@@ -323,6 +325,8 @@ app.patch('/api/requests/:id', (req, res) => {
       email: v.email || '',
       items: Array.isArray(v.items) ? v.items : [],
       shipments: Array.isArray(v.shipments) && v.shipments.length ? v.shipments : [{ eta: '', tracking: '', cost: '', courierLink: '' }],
+      status: v.status || '',
+      notes: v.notes || '',
     }));
   }
 
