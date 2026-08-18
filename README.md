@@ -46,7 +46,8 @@ requests are saved on the server instead of only living in one browser tab.
    - **Start Command:** `npm start`
 4. Under **Environment Variables**, you don't need to add anything to get
    the app running and saving requests. Add SMTP variables later (see
-   section 3) once you want the confirmation email to send for real.
+   section 3) once you want the coordinator notification email to send for
+   real.
 5. Click **Create Web Service**. Render builds it and gives you a URL like
    `https://vk-sample-request-portal.onrender.com`. That's the link you
    share with the team, it's the whole app, form, dashboard, and email
@@ -77,18 +78,18 @@ This is the one setup step worth doing even on a paid plan, a paid web
 service keeps your app running, but only a Disk keeps a specific file from
 being wiped when the service restarts or redeploys.
 
-## 3. Turn on the confirmation email (optional)
+## 3. Turn on the coordinator notification email
 
-The "Email me a notification" toggle on the form sends the submitter (the
-sales coordinator handling that request) a confirmation email when it's on.
-This is separate from the vendor request email, which is never sent
-automatically by the app or the server, it's always just drafted on the
-Email Templates tab for the coordinator or rep to review and send
-themselves.
+Every submitted request emails Cassandra, Jexy, and Aleyah automatically,
+no matter which rep submitted it, so the coordination team never misses a
+request. The "Also email me a copy?" toggle on the form additionally adds
+the submitter's own "Your Email" address to that same email. This is
+separate from the vendor request email, which is never sent automatically
+by the app or the server, it's always just drafted on the Email Templates
+tab for the coordinator or rep to review and send themselves.
 
-To make the confirmation email send for real, add these Environment
-Variables on the Web Service in Render (see `.env.example` for the full
-list):
+To make this email send for real, add these Environment Variables on the
+Web Service in Render (see `.env.example` for the full list):
 
 - `SMTP_HOST`
 - `SMTP_PORT` (587 for most providers, 465 if your provider requires it)
@@ -97,10 +98,25 @@ list):
 - `SMTP_FROM` (the address the email appears to come from, can be the same
   as `SMTP_USER`)
 
-Any SMTP provider works, Gmail with an app password, Outlook, SendGrid,
-Mailgun, and so on. Without these set, the app still saves every request
-normally, it just skips sending that one email and says so in the toast
-message after you submit.
+Any SMTP provider works. For a Gmail account (for example
+cassandramanliguez215@gmail.com), that's:
+
+- `SMTP_HOST` = `smtp.gmail.com`
+- `SMTP_PORT` = `587`
+- `SMTP_USER` = the Gmail address
+- `SMTP_PASS` = an app password generated at
+  myaccount.google.com/apppasswords (this requires 2-Step Verification to
+  be turned on for that Google account first)
+- `SMTP_FROM` = the same Gmail address
+
+Outlook, SendGrid, Mailgun, and other providers work the same way with
+their own host/port/credentials. Without these set, the app still saves
+every request normally, it just skips sending that email and says so in
+the toast message after you submit.
+
+The list of who always gets notified lives near the top of `server.js` as
+`COORDINATOR_NOTIFY_EMAILS`, ask for an updated file if that list ever
+needs to change.
 
 ## 4. Mirror submissions into a Google Sheet (optional)
 
@@ -136,9 +152,22 @@ On the Web Service's page in Render, add two more Environment Variables:
 - `SHEETS_MIRROR_URL` = the Web app URL from step 5 above
 - `SHEETS_MIRROR_TOKEN` = the same random string you set as `SECRET_TOKEN`
 
-Redeploy. From then on, every new sample request also lands as a row in
-the Sheet a few seconds after it saves on the server. A "Requests" tab is
-created automatically the first time a row comes in.
+Redeploy. From then on, every sample request also lands in the Sheet a few
+seconds after it saves on the server, across two tabs that are created
+automatically the first time a request comes in:
+
+- **Requests**: one row per sample request, all the form fields, plus a
+  readable "Vendors" column (e.g. `Ten Strawberry Street (TSS-1001);
+  Vertex China (VC-500)`) so you don't have to open the app to see what's
+  on it.
+- **Vendor Items**: one row per vendor on a request, with that vendor's
+  item numbers and any tracking number/ETA/cost/courier link entered for
+  it. This is what you'd filter or sort by item or tracking number.
+
+Tracking info added later on the dashboard (the "Save" button under a
+vendor's shipment entries) updates that request's rows in both tabs too,
+it's not just a one-time snapshot from when the request was first
+submitted.
 
 If `Code.gs` is ever edited later, a **new deployment version** is needed
 for the change to go live: **Deploy > Manage deployments > pencil icon >

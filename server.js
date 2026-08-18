@@ -3,9 +3,14 @@
  *
  * WHAT THIS DOES
  * Serves the app (public/index.html) and a small JSON API:
- *   POST /api/requests   save a new sample request, assign it an id + date,
- *                        optionally email a confirmation to the submitter.
- *   GET  /api/requests   return every saved request, newest last.
+ *   POST  /api/requests      save a new sample request, assign it an id +
+ *                            date, and email the coordinators (see
+ *                            COORDINATOR_NOTIFY_EMAILS below).
+ *   GET   /api/requests      return every saved request, newest last.
+ *   PATCH /api/requests/:id  update an existing request (used when tracking
+ *                            numbers/shipment info get added or edited later
+ *                            on the dashboard, so those edits are actually
+ *                            saved, not just held in that browser tab).
  *
  * Requests are stored as plain JSON in a file on disk (DATA_DIR/requests.json).
  * That file is always the source of truth for the app. If SHEETS_MIRROR_URL
@@ -61,8 +66,70 @@ function nextId(existing) {
   return stamp + (1000 + seqForThisMonth + 1);
 }
 
-/* ---------------- mail (optional, only used for the "email me a
-   confirmation" toggle, never for vendor request emails) ---------------- */
+/* ---------------- mail ----------------
+   Every new submission notifies this fixed list, no matter which rep
+   submitted it, so the coordination team never misses a request. This is
+   NOT the vendor request email, that one is never sent automatically by
+   this server or the app, it's always just drafted for the coordinator or
+   rep to open and send themselves. */
+const COORDINATOR_NOTIFY_EMAILS = [
+  'cassandra@tabletopreps.com',
+  'jexy@tabletopreps.com',
+  'aleyah@tabletopreps.com',
+];
+
+const LOGO_PATH = path.join(__dirname, 'assets', 'ngr-logo.png');
+
+function escapeHtml(value) {
+  return String(value == null ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// Matches the "Email Templates" preview shown inside the app itself, so the
+// real email that lands in an inbox looks the same as what's previewed there.
+function buildNotificationHtml(req) {
+  const money = (n) => '$' + Number(n || 0).toLocaleString();
+  const dateStr = new Date(req.date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+
+  const vendorRows = (req.vendors || []).map((v) => {
+    const items = (v.items || []).map(escapeHtml).join(', ') || 'N/A';
+    const desc = v.desc ? `<br><span style="color:#898781; font-size:12px;">${escapeHtml(v.desc)}</span>` : '';
+    return `<tr><td style="padding:6px 0; color:#52514e; width:150px; vertical-align:top;">${escapeHtml(v.name)}</td><td style="padding:6px 0; vertical-align:top;">${items}${desc}</td></tr>`;
+  }).join('');
+
+  return `
+  <div style="font-family:Arial, Helvetica, sans-serif; max-width:600px; margin:0 auto; border:1px solid #e1e0d9; border-radius:10px; overflow:hidden;">
+    <div style="background:linear-gradient(135deg,#0f2438,#16324a); padding:24px 32px 28px;">
+      <img src="cid:ngrlogo" alt="New Generation Reps" style="height:30px; display:block; margin-bottom:14px;" />
+      <div style="font-size:11px; letter-spacing:1px; text-transform:uppercase; color:#7fd8c9; font-weight:700;">V&amp;K Sample Portal</div>
+      <div style="font-size:20px; font-weight:800; margin-top:6px; color:#fff;">A new sample request just came in</div>
+      <div style="font-size:13px; color:rgba(255,255,255,0.75); margin-top:4px;">Submitted by ${escapeHtml(req.rep)} on ${dateStr}</div>
+    </div>
+    <div style="padding:26px 32px; background:#fff;">
+      <table style="width:100%; font-size:13.5px; border-collapse:collapse;">
+        <tr><td style="padding:6px 0; color:#52514e; width:150px;">Request ID</td><td style="padding:6px 0; font-weight:700;">${escapeHtml(req.id)}</td></tr>
+        <tr><td style="padding:6px 0; color:#52514e;">Customer</td><td style="padding:6px 0; font-weight:700;">${escapeHtml(req.customer)}</td></tr>
+        <tr><td style="padding:6px 0; color:#52514e;">Project</td><td style="padding:6px 0;">${escapeHtml(req.project)}</td></tr>
+        <tr><td style="padding:6px 0; color:#52514e;">Segment</td><td style="padding:6px 0;">${escapeHtml(req.segment)}</td></tr>
+        <tr><td style="padding:6px 0; color:#52514e;">Amount</td><td style="padding:6px 0; font-weight:700;">${money(req.amount)}</td></tr>
+        <tr><td style="padding:6px 0; color:#52514e;">Needed By</td><td style="padding:6px 0;">${escapeHtml(req.neededBy)}</td></tr>
+        <tr><td style="padding:6px 0; color:#52514e;">Ship To</td><td style="padding:6px 0;">${escapeHtml(req.address)}</td></tr>
+        <tr><td style="padding:6px 0; color:#52514e;">Attention To</td><td style="padding:6px 0;">${escapeHtml(req.attn)}</td></tr>
+        <tr><td style="padding:6px 0; color:#52514e; vertical-align:top;">Add to Lead</td><td style="padding:6px 0;"><span style="background:${req.lead ? '#e3f6f1' : '#eef0f2'}; color:${req.lead ? '#0d8a79' : '#898781'}; font-size:11px; font-weight:700; padding:3px 9px; border-radius:999px;">${req.lead ? 'YES' : 'NO'}</span></td></tr>
+      </table>
+      <div style="margin-top:18px; font-size:12px; letter-spacing:0.5px; text-transform:uppercase; color:#898781; font-weight:700;">Vendors &amp; Items</div>
+      <table style="width:100%; font-size:13.5px; border-collapse:collapse; margin-top:6px;">
+        ${vendorRows}
+      </table>
+      ${req.notes ? `<div style="margin-top:18px; font-size:13px; color:#52514e;"><b>Notes:</b> ${escapeHtml(req.notes)}</div>` : ''}
+    </div>
+    <div style="padding:14px 32px; background:#f7f8fa; font-size:11.5px; color:#898781; border-top:1px solid #e1e0d9;">This is an automated notification from the V&amp;K Sample Request Portal.</div>
+  </div>`;
+}
+
 function getTransport() {
   const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS } = process.env;
   if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) return null;
@@ -74,30 +141,56 @@ function getTransport() {
   });
 }
 
-async function sendConfirmation(req) {
+async function sendNotification(req) {
   const transport = getTransport();
-  if (!transport || !req.repEmail) return false;
-  const vendorNames = (req.vendors || []).map((v) => v.name).filter(Boolean).join(', ');
+  if (!transport) return false;
+
+  // always goes to the coordinators, plus the submitter's own address too
+  // if they opted into that with the "Also email me a copy?" toggle
+  const recipients = COORDINATOR_NOTIFY_EMAILS.slice();
+  if (req.notifyMe && req.repEmail && !recipients.includes(req.repEmail)) {
+    recipients.push(req.repEmail);
+  }
+
+  const vendorLines = (req.vendors || []).map((v, i) => {
+    const items = (v.items || []).join(', ') || 'N/A';
+    let block = `Vendor ${i + 1}: ${v.name || ''}\nItems: ${items}`;
+    if (v.desc) block += `\nDescription: ${v.desc}`;
+    return block;
+  }).join('\n\n');
+
   const subject = `New Sample Request Submitted: ${req.customer} (${req.id})`;
   const text =
-    'A new sample request just came in.\n\n' +
-    `Request ID: ${req.id}\n` +
-    `Customer: ${req.customer}\n` +
-    `Project: ${req.project}\n` +
-    `Segment: ${req.segment}\n` +
-    `Vendors: ${vendorNames}\n` +
-    `Amount: $${req.amount}\n` +
-    `Needed By: ${req.neededBy}\n`;
+    'NEW SAMPLE REQUEST - V&K / New Generation Reps\n' +
+    '============================================\n\n' +
+    `Request ID     : ${req.id}\n` +
+    `Date Submitted : ${new Date(req.date).toLocaleString('en-US')}\n` +
+    `Submitted By   : ${req.rep}\n` +
+    `Customer       : ${req.customer}\n` +
+    `Project        : ${req.project}\n` +
+    `Segment        : ${req.segment}\n` +
+    `Status         : ${req.status}\n` +
+    `Project Amount : $${Number(req.amount || 0).toLocaleString()}\n` +
+    `Needed By      : ${req.neededBy}\n` +
+    `Ship To        : ${req.address}\n` +
+    `Attention To   : ${req.attn}\n\n` +
+    '--- VENDORS & ITEMS ---\n' + vendorLines +
+    (req.notes ? `\n\nNotes: ${req.notes}` : '') +
+    '\n\n============================================\n' +
+    'This is an automated notification from the V&K Sample Request Portal.';
+
   try {
     await transport.sendMail({
       from: process.env.SMTP_FROM || process.env.SMTP_USER,
-      to: req.repEmail,
+      to: recipients.join(', '),
       subject,
       text,
+      html: buildNotificationHtml(req),
+      attachments: [{ filename: 'ngr-logo.png', path: LOGO_PATH, cid: 'ngrlogo' }],
     });
     return true;
   } catch (err) {
-    console.error('Confirmation email failed to send:', err);
+    console.error('Notification email failed to send:', err);
     return false;
   }
 }
@@ -172,16 +265,42 @@ app.post('/api/requests', async (req, res) => {
   existing.push(saved);
   writeRequests(existing);
 
-  let notified = false;
-  if (saved.notifyMe) {
-    notified = await sendConfirmation(saved);
-  }
+  // always notifies the coordinators, regardless of the "Also email me a
+  // copy?" toggle, that toggle only controls whether the submitter's own
+  // address is added to the list
+  const notified = await sendNotification(saved);
 
   // fire-and-forget: don't make the submitter wait on Sheets, and don't
   // fail the save if Sheets is slow, misconfigured, or down
   mirrorToSheets(saved);
 
   res.json({ ok: true, request: saved, notified });
+});
+
+app.patch('/api/requests/:id', (req, res) => {
+  const { id } = req.params;
+  const body = req.body || {};
+  const existing = readRequests();
+  const idx = existing.findIndex((r) => r.id === id);
+  if (idx === -1) {
+    return res.status(404).json({ ok: false, error: 'No request found with id ' + id });
+  }
+
+  // only vendors (shipment/tracking info) is editable after submission today,
+  // everything else about the request is fixed once it's saved
+  if (Array.isArray(body.vendors)) {
+    existing[idx].vendors = body.vendors.map((v) => ({
+      name: v.name,
+      desc: v.desc || '',
+      email: v.email || '',
+      items: Array.isArray(v.items) ? v.items : [],
+      shipments: Array.isArray(v.shipments) && v.shipments.length ? v.shipments : [{ eta: '', tracking: '', cost: '', courierLink: '' }],
+    }));
+  }
+
+  writeRequests(existing);
+  mirrorToSheets(existing[idx]);
+  res.json({ ok: true, request: existing[idx] });
 });
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));

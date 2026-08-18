@@ -314,9 +314,12 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
   .vendor-row { display:flex; align-items:center; justify-content: space-between; padding: 8px 0; font-size: 13.5px; }
   .vendor-row .swatch { width: 8px; height: 8px; border-radius: 50%; display:inline-block; margin-right: 8px; }
 
-  .table-toolbar { display:flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+  .table-toolbar { display:flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; align-items:center; }
   .table-toolbar input, .table-toolbar select { padding: 8px 11px; border: 1px solid var(--gridline); border-radius: 8px; font-size: 13px; background: #fff; }
   .table-toolbar input { flex: 1; min-width: 180px; }
+  .date-filter-group { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+  .date-filter-group label { font-size: 12px; color: var(--text-muted); font-weight:600; }
+  .date-filter-group input[type="date"] { flex: 0 0 auto; min-width: 140px; }
 
   table.log { width: 100%; border-collapse: collapse; font-size: 13px; }
   table.log thead th {
@@ -489,8 +492,8 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
 
         <div class="lead-row">
           <div class="lead-copy">
-            <strong>Email me a notification? <span class="lead-pill on" id="notify-pill">ON</span></strong>
-            <span>ON sends you a confirmation email as soon as this request is submitted. OFF skips the email, but you'll still see it on the Admin Dashboard. The vendor request email is always auto-drafted for you, it's never sent automatically, you open and send it yourself from the Email Templates tab.</span>
+            <strong>Also email me a copy? <span class="lead-pill on" id="notify-pill">ON</span></strong>
+            <span>Cassandra, Jexy, and Aleyah are notified by email on every submission automatically, no matter who's submitting. ON additionally sends a copy of that notification to the "Your Email" address above. The vendor request email is always auto-drafted for you, it's never sent automatically, you open and send it yourself from the Email Templates tab.</span>
           </div>
           <label class="switch">
             <input type="checkbox" id="f-notify" checked />
@@ -600,6 +603,13 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
         <input id="log-search" placeholder="Search by rep, customer, vendor, project, segment..." />
         <select id="log-status-filter"><option value="">All Statuses</option><option>Open</option><option>Closed</option></select>
         <select id="log-lead-filter"><option value="">All (Lead or not)</option><option value="yes">Lead only</option><option value="no">Not a lead</option></select>
+        <div class="date-filter-group">
+          <label for="log-date-from">From</label>
+          <input type="date" id="log-date-from" />
+          <label for="log-date-to">To</label>
+          <input type="date" id="log-date-to" />
+          <button type="button" class="btn-secondary" id="log-date-clear" style="padding:8px 12px; font-size:12.5px;">Clear dates</button>
+        </div>
       </div>
       <table class="log">
         <thead>
@@ -688,6 +698,21 @@ async function apiList() {
     return await res.json();
   } catch (err) {
     console.error('List failed:', err);
+    return { ok: false, error: String(err) };
+  }
+}
+
+async function apiUpdate(id, payload) {
+  try {
+    const res = await fetch('/api/requests/' + encodeURIComponent(id), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    return await res.json();
+  } catch (err) {
+    console.error('Update failed:', err);
     return { ok: false, error: String(err) };
   }
 }
@@ -845,6 +870,15 @@ const REP_EMAILS = {
 const REP_COORDINATOR_MAP = {
   "Tyler Bures": "cassandra@tabletopreps.com",
 };
+
+// Every submission notifies this fixed list, no matter which rep submits it,
+// so the coordination team never misses a request. Kept in sync with the
+// same list in server.js.
+const COORDINATOR_NOTIFY_EMAILS = [
+  "cassandra@tabletopreps.com",
+  "jexy@tabletopreps.com",
+  "aleyah@tabletopreps.com",
+];
 const NGR_LOGO = "data:image/png;base64,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";
 
 /* ---------------- tabs ---------------- */
@@ -1061,7 +1095,11 @@ $('#submit-btn').addEventListener('click', async () => {
   const parts = [`Submitted ${req.id}.`, 'Vendor email drafted, ready to open on the Email Templates tab.'];
   if (result && result.ok) {
     parts.push('Saved to the server.');
-    parts.push(req.notifyMe ? (result.notified ? 'Confirmation email sent to you.' : 'Confirmation email could not be sent, check the server\'s SMTP settings.') : 'No confirmation email sent (per your toggle).');
+    if (result.notified) {
+      parts.push(req.notifyMe ? 'Notification emailed to the coordinators and you.' : 'Notification emailed to the coordinators.');
+    } else {
+      parts.push('Coordinator notification could not be sent, check the server\'s SMTP settings.');
+    }
   } else {
     parts.push('Could not reach the server, saved in this tab only for now.');
   }
@@ -1118,6 +1156,10 @@ function renderLog() {
   const search = $('#log-search').value.toLowerCase();
   const statusF = $('#log-status-filter').value;
   const leadF = $('#log-lead-filter').value;
+  const dateFromVal = $('#log-date-from').value;
+  const dateToVal = $('#log-date-to').value;
+  const dateFrom = dateFromVal ? new Date(dateFromVal + 'T00:00:00') : null;
+  const dateTo = dateToVal ? new Date(dateToVal + 'T23:59:59.999') : null;
   const body = $('#log-body');
   body.innerHTML = '';
 
@@ -1127,11 +1169,16 @@ function renderLog() {
     if (statusF && r.status !== statusF) return false;
     if (leadF === 'yes' && !r.lead) return false;
     if (leadF === 'no' && r.lead) return false;
+    if (dateFrom && r.date < dateFrom) return false;
+    if (dateTo && r.date > dateTo) return false;
     return true;
   });
 
   if (!filtered.length) {
-    body.innerHTML = `<tr><td colspan="11" style="text-align:center; color:var(--text-muted); padding:24px;">No requests yet. Submit one from the "New Sample Request" tab. It'll show up here live.</td></tr>`;
+    const msg = requests.length
+      ? 'No requests match the current filters. Try clearing the date range or search.'
+      : 'No requests yet. Submit one from the "New Sample Request" tab. It\'ll show up here live.';
+    body.innerHTML = `<tr><td colspan="11" style="text-align:center; color:var(--text-muted); padding:24px;">${msg}</td></tr>`;
     return;
   }
 
@@ -1181,12 +1228,17 @@ function renderLog() {
       </div></div></td>`;
       body.appendChild(dtr);
 
-      dtr.querySelectorAll('[data-savevendor]').forEach(btn => btn.onclick = (e) => {
+      dtr.querySelectorAll('[data-savevendor]').forEach(btn => btn.onclick = async (e) => {
         e.stopPropagation();
         const vi = parseInt(btn.dataset.savevendor);
         captureVendorShipments(r, vi);
-        showToast(`Tracking info saved for ${r.vendors[vi].name} on ${r.id}. Re-export to Excel to sync it.`);
         renderLog();
+        const result = await apiUpdate(r.id, { vendors: r.vendors });
+        if (result && result.ok) {
+          showToast(`Tracking info saved for ${r.vendors[vi].name} on ${r.id}.`);
+        } else {
+          showToast(`Tracking info saved in this tab, but couldn't reach the server to save it there too. Try again once you're back online.`);
+        }
       });
       dtr.querySelectorAll('[data-addentry]').forEach(btn => btn.onclick = (e) => {
         e.stopPropagation();
@@ -1264,9 +1316,14 @@ function captureVendorShipments(r, vi) {
   });
 }
 
-['#log-search','#log-status-filter','#log-lead-filter'].forEach(sel => {
+['#log-search','#log-status-filter','#log-lead-filter','#log-date-from','#log-date-to'].forEach(sel => {
   $(sel).addEventListener('input', renderLog);
   $(sel).addEventListener('change', renderLog);
+});
+$('#log-date-clear').addEventListener('click', () => {
+  $('#log-date-from').value = '';
+  $('#log-date-to').value = '';
+  renderLog();
 });
 
 /* ---------------- Excel export ---------------- */
@@ -1368,8 +1425,10 @@ function renderEmailPreview() {
   }
   $('#open-mailto').disabled = false;
 
-  $('#notif-to').textContent = last.repEmail || 'not provided';
-  $('#notif-subject').innerHTML = `New Sample Request Submitted: ${last.customer} (${last.id}) <span class="badge ${last.notifyMe ? 'leadyes' : 'leadno'}" style="margin-left:6px; vertical-align:1px;">${last.notifyMe ? 'Sent to rep' : 'Not sent (rep opted out)'}</span>`;
+  const notifyRecipients = COORDINATOR_NOTIFY_EMAILS.slice();
+  if (last.notifyMe && last.repEmail && !notifyRecipients.includes(last.repEmail)) notifyRecipients.push(last.repEmail);
+  $('#notif-to').textContent = notifyRecipients.join(', ');
+  $('#notif-subject').innerHTML = `New Sample Request Submitted: ${last.customer} (${last.id}) <span class="badge leadyes" style="margin-left:6px; vertical-align:1px;">${last.notifyMe ? 'Coordinators + you' : 'Coordinators'}</span>`;
   $('#notif-body').innerHTML = `
     <div style="background:linear-gradient(135deg,#0f2438,#16324a); padding:24px 32px 28px;">
       <img src="${NGR_LOGO}" alt="New Generation Reps" style="height:30px; display:block; margin-bottom:14px;" />
