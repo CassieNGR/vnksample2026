@@ -446,7 +446,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       <div class="field" style="margin-top:14px; max-width: 360px;">
         <label>Your Email <span class="req">*</span></label>
         <input id="f-repemail" type="email" placeholder="you@tabletopreps.com" />
-        <div class="hint">Auto-fills based on the Sales Rep you picked (the assigned coordinator if we have one on file, otherwise that rep's own email), edit it if this request needs to go to someone else. This is who receives the confirmation email and is shown as the "To" on vendor draft emails.</div>
+        <div class="hint">Auto-fills with that rep's own email once you pick a Sales Rep, edit it if this request needs to go to someone else. This is who receives the confirmation email and is shown as the "To" on vendor draft emails. Cassandra, Jexy, and Aleyah are notified on every submission automatically regardless of this field.</div>
       </div>
       <div class="grid-2" style="margin-top:14px;">
         <div class="field">
@@ -902,18 +902,6 @@ const REP_EMAILS = {
   "Zachary Manasan": "zachary@tabletopreps.com",
 };
 
-// Which sales coordinator gets the notification for each rep's requests, so
-// it always reaches the person handling that account, even if the rep
-// submitting isn't a coordinator themselves. Confirmed so far: Tyler Bures
-// (Las Vegas) routes to Cassie. The rest are still pending confirmation from
-// Cassie on how DFW/Texas/Oklahoma splits between Aleyah, Jexy, and Jennifer,
-// so they're left blank on purpose rather than guessed, this falls back to
-// whatever's typed into "Your Email" until that's filled in.
-const REP_COORDINATOR_MAP = {
-  "Tyler Bures": "cassandra@tabletopreps.com",
-  "James Enman": "aleyah@tabletopreps.com",
-};
-
 // Every submission notifies this fixed list, no matter which rep submits it,
 // so the coordination team never misses a request. Kept in sync with the
 // same list in server.js.
@@ -1071,7 +1059,7 @@ $('#f-rep').addEventListener('change', (e) => {
   const rep = e.target.value;
   const emailField = $('#f-repemail');
   if (!rep) return;
-  const suggested = REP_COORDINATOR_MAP[rep] || REP_EMAILS[rep] || '';
+  const suggested = REP_EMAILS[rep] || '';
   if (suggested) emailField.value = suggested;
 });
 
