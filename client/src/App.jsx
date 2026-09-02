@@ -199,21 +199,61 @@ function Pill({ children, tone = "neutral" }) {
   return <span style={{ background: s.bg, color: s.fg, fontSize: 11.5, fontWeight: 700, padding: "3px 9px", borderRadius: 20, whiteSpace: "nowrap" }}>{children}</span>;
 }
 
-function DataTable({ columns, rows, pageSize = 12, onRowClick }) {
+function DataTable({ columns, rows, pageSize = 12, onRowClick, defaultSort }) {
   const [page, setPage] = useState(0);
+  const [sort, setSort] = useState(defaultSort || null); // { key, dir: 'asc'|'desc' }
   useEffect(() => setPage(0), [rows.length]);
+
+  const sorted = useMemo(() => {
+    if (!sort) return rows;
+    const col = columns.find((c) => c.key === sort.key);
+    const acc = col && col.sortAccessor ? col.sortAccessor : (r) => r[sort.key];
+    const copy = [...rows];
+    copy.sort((a, b) => {
+      const av = acc(a), bv = acc(b);
+      let cmp;
+      if (typeof av === "number" && typeof bv === "number") cmp = av - bv;
+      else cmp = String(av ?? "").localeCompare(String(bv ?? ""), undefined, { numeric: true, sensitivity: "base" });
+      return sort.dir === "asc" ? cmp : -cmp;
+    });
+    return copy;
+  }, [rows, sort, columns]);
+
   const start = page * pageSize;
-  const shown = rows.slice(start, start + pageSize);
-  const pages = Math.max(1, Math.ceil(rows.length / pageSize));
+  const shown = sorted.slice(start, start + pageSize);
+  const pages = Math.max(1, Math.ceil(sorted.length / pageSize));
+
+  function toggleSort(c) {
+    if (!c.sortable) return;
+    setSort((prev) => {
+      if (!prev || prev.key !== c.key) return { key: c.key, dir: c.sortType === "number" ? "desc" : "asc" };
+      return { key: c.key, dir: prev.dir === "asc" ? "desc" : "asc" };
+    });
+    setPage(0);
+  }
+
   return (
     <div>
       <div style={{ overflowX: "auto" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
           <thead>
             <tr>
-              {columns.map((c) => (
-                <th key={c.key} style={{ textAlign: c.align || "left", padding: "9px 10px", color: SUB, fontSize: 11.5, fontWeight: 700, letterSpacing: 0.4, textTransform: "uppercase", borderBottom: `1.5px solid ${BORDER}`, whiteSpace: "nowrap" }}>{c.label}</th>
-              ))}
+              {columns.map((c) => {
+                const active = sort && sort.key === c.key;
+                return (
+                  <th
+                    key={c.key}
+                    onClick={() => toggleSort(c)}
+                    style={{
+                      textAlign: c.align || "left", padding: "9px 10px", color: active ? NAVY : SUB, fontSize: 11.5, fontWeight: 700,
+                      letterSpacing: 0.4, textTransform: "uppercase", borderBottom: `1.5px solid ${active ? NAVY : BORDER}`, whiteSpace: "nowrap",
+                      cursor: c.sortable ? "pointer" : "default", userSelect: "none",
+                    }}
+                  >
+                    {c.label}{c.sortable && <span style={{ marginLeft: 4, opacity: active ? 1 : 0.35 }}>{active ? (sort.dir === "asc" ? "\u2191" : "\u2193") : "\u2195"}</span>}
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody>
@@ -230,9 +270,9 @@ function DataTable({ columns, rows, pageSize = 12, onRowClick }) {
           </tbody>
         </table>
       </div>
-      {rows.length > pageSize && (
+      {sorted.length > pageSize && (
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12, alignItems: "center" }}>
-          <span style={{ fontSize: 12, color: SUB }}>{start + 1}&ndash;{Math.min(start + pageSize, rows.length)} of {rows.length}</span>
+          <span style={{ fontSize: 12, color: SUB }}>{start + 1}&ndash;{Math.min(start + pageSize, sorted.length)} of {sorted.length}</span>
           <button onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0} style={{ border: `1px solid ${BORDER}`, background: "#fff", borderRadius: 7, padding: "5px 10px", fontSize: 12, cursor: page === 0 ? "default" : "pointer", opacity: page === 0 ? 0.4 : 1 }}>Prev</button>
           <button onClick={() => setPage((p) => Math.min(pages - 1, p + 1))} disabled={page >= pages - 1} style={{ border: `1px solid ${BORDER}`, background: "#fff", borderRadius: 7, padding: "5px 10px", fontSize: 12, cursor: page >= pages - 1 ? "default" : "pointer", opacity: page >= pages - 1 ? 0.4 : 1 }}>Next</button>
         </div>
@@ -316,21 +356,21 @@ function DayDetailModal({ day, onClose, onTxnClick }) {
 
         {tab === "ar" && (
           day.ar_items ? (
-            <DataTable pageSize={8} rows={arRows} columns={[
-              { key: "name", label: "Customer", wrap: true },
-              { key: "current", label: "Current", align: "right", render: (r) => fmt$(r.current) },
-              { key: "overdue", label: "Overdue", align: "right", render: (r) => <span style={{ color: (r.d1_30 + r.d31_60 + r.d61_90 + r.d90plus) > 0 ? RED : INK }}>{fmt$(r.d1_30 + r.d31_60 + r.d61_90 + r.d90plus)}</span> },
-              { key: "total", label: "Balance", align: "right", render: (r) => <b>{fmt$2(r.total)}</b> },
+            <DataTable pageSize={8} rows={arRows} defaultSort={{ key: "total", dir: "desc" }} columns={[
+              { key: "name", label: "Customer", wrap: true, sortable: true, sortType: "text" },
+              { key: "current", label: "Current", align: "right", sortable: true, sortType: "number", render: (r) => fmt$(r.current) },
+              { key: "overdue", label: "Overdue", align: "right", sortable: true, sortType: "number", sortAccessor: (r) => r.d1_30 + r.d31_60 + r.d61_90 + r.d90plus, render: (r) => <span style={{ color: (r.d1_30 + r.d31_60 + r.d61_90 + r.d90plus) > 0 ? RED : INK }}>{fmt$(r.d1_30 + r.d31_60 + r.d61_90 + r.d90plus)}</span> },
+              { key: "total", label: "Balance", align: "right", sortable: true, sortType: "number", render: (r) => <b>{fmt$2(r.total)}</b> },
             ]} />
           ) : <EmptyNote text="No AR snapshot uploaded for this date yet." />
         )}
         {tab === "ap" && (
           day.ap_items ? (
-            <DataTable pageSize={8} rows={apRows} columns={[
-              { key: "name", label: "Vendor", wrap: true },
-              { key: "current", label: "Current", align: "right", render: (r) => fmt$(r.current) },
-              { key: "overdue", label: "Overdue", align: "right", render: (r) => <span style={{ color: (r.d1_30 + r.d31_60 + r.d61_90 + r.d90plus) > 0 ? RED : INK }}>{fmt$(r.d1_30 + r.d31_60 + r.d61_90 + r.d90plus)}</span> },
-              { key: "total", label: "Balance", align: "right", render: (r) => <b>{fmt$2(r.total)}</b> },
+            <DataTable pageSize={8} rows={apRows} defaultSort={{ key: "total", dir: "desc" }} columns={[
+              { key: "name", label: "Vendor", wrap: true, sortable: true, sortType: "text" },
+              { key: "current", label: "Current", align: "right", sortable: true, sortType: "number", render: (r) => fmt$(r.current) },
+              { key: "overdue", label: "Overdue", align: "right", sortable: true, sortType: "number", sortAccessor: (r) => r.d1_30 + r.d31_60 + r.d61_90 + r.d90plus, render: (r) => <span style={{ color: (r.d1_30 + r.d31_60 + r.d61_90 + r.d90plus) > 0 ? RED : INK }}>{fmt$(r.d1_30 + r.d31_60 + r.d61_90 + r.d90plus)}</span> },
+              { key: "total", label: "Balance", align: "right", sortable: true, sortType: "number", render: (r) => <b>{fmt$2(r.total)}</b> },
             ]} />
           ) : <EmptyNote text="No AP snapshot uploaded for this date yet." />
         )}
@@ -403,13 +443,16 @@ function Field({ label, value, bold, block }) {
 }
 
 /* ================= aging bucket drill-down ================= */
-function AgingBucketModal({ label, bucketKey, items, nameLabel, onClose }) {
+function AgingBucketModal({ label, bucketKey, bucketKeys, items, nameLabel, onClose }) {
   const [q, setQ] = useState("");
+  const keys = bucketKeys || [bucketKey];
+  const valueOf = (it) => keys.reduce((s, k) => s + (it[k] || 0), 0);
   const rows = items
-    .filter((it) => (it[bucketKey] || 0) > 0)
+    .filter((it) => valueOf(it) > 0)
     .filter((it) => it.name.toLowerCase().includes(q.toLowerCase()))
-    .sort((a, b) => (b[bucketKey] || 0) - (a[bucketKey] || 0));
-  const bucketSum = rows.reduce((s, it) => s + (it[bucketKey] || 0), 0);
+    .map((it) => ({ ...it, _bucketValue: valueOf(it) }))
+    .sort((a, b) => b._bucketValue - a._bucketValue);
+  const bucketSum = rows.reduce((s, it) => s + it._bucketValue, 0);
 
   return (
     <Modal width={560} onClose={onClose}>
@@ -420,10 +463,10 @@ function AgingBucketModal({ label, bucketKey, items, nameLabel, onClose }) {
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={`Search ${nameLabel.toLowerCase()}...`} style={{ border: `1px solid ${BORDER}`, borderRadius: 8, padding: "7px 10px 7px 28px", fontSize: 12.5, width: "100%", outline: "none" }} />
         </div>
         {rows.length ? (
-          <DataTable pageSize={8} rows={rows} columns={[
-            { key: "name", label: nameLabel, wrap: true },
-            { key: "bucket", label: label, align: "right", render: (r) => <b>{fmt$2(r[bucketKey])}</b> },
-            { key: "total", label: "Total balance", align: "right", render: (r) => fmt$2(r.total) },
+          <DataTable pageSize={8} rows={rows} defaultSort={{ key: "_bucketValue", dir: "desc" }} columns={[
+            { key: "name", label: nameLabel, wrap: true, sortable: true, sortType: "text" },
+            { key: "_bucketValue", label: label, align: "right", sortable: true, sortType: "number", render: (r) => <b>{fmt$2(r._bucketValue)}</b> },
+            { key: "total", label: "Total balance", align: "right", sortable: true, sortType: "number", render: (r) => fmt$2(r.total) },
           ]} />
         ) : <EmptyNote text={`Nobody falls into ${label.toLowerCase()} right now.`} />}
       </div>
@@ -575,15 +618,15 @@ function Overview({ daily, setPage, openDay }) {
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>
         <SectionCard title="Customers with a balance">
-          <DataTable pageSize={6} rows={arCustomers} onRowClick={lastAR ? () => openDay(lastAR) : undefined} columns={[
-            { key: "name", label: "Customer", wrap: true },
-            { key: "total", label: "Balance", align: "right", render: (r) => <b>{fmt$2(r.total)}</b> },
+          <DataTable pageSize={6} defaultSort={{ key: "total", dir: "desc" }} rows={arCustomers} onRowClick={lastAR ? () => openDay(lastAR) : undefined} columns={[
+            { key: "name", label: "Customer", wrap: true, sortable: true, sortType: "text" },
+            { key: "total", label: "Balance", align: "right", sortable: true, sortType: "number", render: (r) => <b>{fmt$2(r.total)}</b> },
           ]} />
         </SectionCard>
         <SectionCard title="Vendors with a balance">
-          <DataTable pageSize={6} rows={apVendors} onRowClick={lastAP ? () => openDay(lastAP) : undefined} columns={[
-            { key: "name", label: "Vendor" },
-            { key: "total", label: "Balance", align: "right", render: (r) => <b>{fmt$2(r.total)}</b> },
+          <DataTable pageSize={6} defaultSort={{ key: "total", dir: "desc" }} rows={apVendors} onRowClick={lastAP ? () => openDay(lastAP) : undefined} columns={[
+            { key: "name", label: "Vendor", sortable: true, sortType: "text" },
+            { key: "total", label: "Balance", align: "right", sortable: true, sortType: "number", render: (r) => <b>{fmt$2(r.total)}</b> },
           ]} />
         </SectionCard>
       </div>
@@ -620,8 +663,8 @@ function ARPage({ daily, openDay }) {
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14 }}>
         <KpiCard label="Total outstanding" value={fmt$(last.ar_total)} sub={`${last.ar_count} customers · ${shortDate(last.date)}`} icon={Receipt} accent={BLUE} onClick={() => openDay(last)} />
-        <KpiCard label="Current" value={pctCurrent.toFixed(1) + "%"} sub={fmt$(last.ar_items.reduce((s, i) => s + i.current, 0))} icon={TrendingUp} accent={GREEN} />
-        <KpiCard label="Overdue (1-90+)" value={fmt$(overdue)} sub={((overdue / last.ar_total) * 100).toFixed(1) + "% of total"} icon={AlertTriangle} accent={RED} />
+        <KpiCard label="Current" value={pctCurrent.toFixed(1) + "%"} sub={fmt$(last.ar_items.reduce((s, i) => s + i.current, 0))} icon={TrendingUp} accent={GREEN} onClick={() => setBucket({ name: "Current", key: "current" })} />
+        <KpiCard label="Overdue (1-90+)" value={fmt$(overdue)} sub={((overdue / last.ar_total) * 100).toFixed(1) + "% of total"} icon={AlertTriangle} accent={RED} onClick={() => setBucket({ name: "Overdue (1-90+)", keys: ["d1_30", "d31_60", "d61_90", "d90plus"] })} />
         {first.ar_total != null && (
           <KpiCard label="Change over range" value={fmt$(last.ar_total - first.ar_total)} delta={((last.ar_total - first.ar_total) / first.ar_total) * 100} deltaGood={last.ar_total <= first.ar_total} icon={TrendingDown} accent={GOLD} />
         )}
@@ -654,9 +697,9 @@ function ARPage({ daily, openDay }) {
           <div style={{ fontSize: 11.5, color: SUB, marginTop: 4 }}>Click a bar to see who's in that bucket</div>
         </SectionCard>
         <SectionCard title="Customers with a balance">
-          <DataTable pageSize={7} rows={customers} columns={[
-            { key: "name", label: "Customer", wrap: true },
-            { key: "total", label: "Balance", align: "right", render: (r) => <b style={{ color: r.total < 0 ? GREEN : INK }}>{fmt$2(r.total)}</b> },
+          <DataTable pageSize={7} defaultSort={{ key: "total", dir: "desc" }} rows={customers} columns={[
+            { key: "name", label: "Customer", wrap: true, sortable: true, sortType: "text" },
+            { key: "total", label: "Balance", align: "right", sortable: true, sortType: "number", render: (r) => <b style={{ color: r.total < 0 ? GREEN : INK }}>{fmt$2(r.total)}</b> },
           ]} />
         </SectionCard>
       </div>
@@ -669,7 +712,7 @@ function ARPage({ daily, openDay }) {
         ]} />
       </SectionCard>
 
-      {bucket && <AgingBucketModal label={bucket.name} bucketKey={bucket.key} items={last.ar_items} nameLabel="Customers" onClose={() => setBucket(null)} />}
+      {bucket && <AgingBucketModal label={bucket.name} bucketKey={bucket.key} bucketKeys={bucket.keys} items={last.ar_items} nameLabel="Customers" onClose={() => setBucket(null)} />}
     </div>
   );
 }
@@ -693,8 +736,8 @@ function APPage({ daily, openDay }) {
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14 }}>
         <KpiCard label="Total outstanding" value={fmt$(last.ap_total)} sub={`${last.ap_count} vendors · ${shortDate(last.date)}`} icon={Landmark} accent={RED} onClick={() => openDay(last)} />
-        <KpiCard label="Current" value={pctCurrent.toFixed(1) + "%"} sub={fmt$(last.ap_items.reduce((s, i) => s + i.current, 0))} icon={TrendingUp} accent={GREEN} />
-        <KpiCard label="Overdue (1-90+)" value={fmt$(overdue)} sub={((overdue / last.ap_total) * 100).toFixed(1) + "% of total"} icon={AlertTriangle} accent={RED} />
+        <KpiCard label="Current" value={pctCurrent.toFixed(1) + "%"} sub={fmt$(last.ap_items.reduce((s, i) => s + i.current, 0))} icon={TrendingUp} accent={GREEN} onClick={() => setBucket({ name: "Current", key: "current" })} />
+        <KpiCard label="Overdue (1-90+)" value={fmt$(overdue)} sub={((overdue / last.ap_total) * 100).toFixed(1) + "% of total"} icon={AlertTriangle} accent={RED} onClick={() => setBucket({ name: "Overdue (1-90+)", keys: ["d1_30", "d31_60", "d61_90", "d90plus"] })} />
         {first.ap_total != null && (
           <KpiCard label="Change over range" value={fmt$(last.ap_total - first.ap_total)} delta={((last.ap_total - first.ap_total) / first.ap_total) * 100} deltaGood={last.ap_total <= first.ap_total} icon={TrendingDown} accent={GOLD} />
         )}
@@ -727,9 +770,9 @@ function APPage({ daily, openDay }) {
           <div style={{ fontSize: 11.5, color: SUB, marginTop: 4 }}>Click a bar to see who's in that bucket</div>
         </SectionCard>
         <SectionCard title="Vendors with a balance">
-          <DataTable pageSize={7} rows={vendors} columns={[
-            { key: "name", label: "Vendor", wrap: true },
-            { key: "total", label: "Balance", align: "right", render: (r) => <b>{fmt$2(r.total)}</b> },
+          <DataTable pageSize={7} defaultSort={{ key: "total", dir: "desc" }} rows={vendors} columns={[
+            { key: "name", label: "Vendor", wrap: true, sortable: true, sortType: "text" },
+            { key: "total", label: "Balance", align: "right", sortable: true, sortType: "number", render: (r) => <b>{fmt$2(r.total)}</b> },
           ]} />
         </SectionCard>
       </div>
@@ -742,7 +785,7 @@ function APPage({ daily, openDay }) {
         ]} />
       </SectionCard>
 
-      {bucket && <AgingBucketModal label={bucket.name} bucketKey={bucket.key} items={last.ap_items} nameLabel="Vendors" onClose={() => setBucket(null)} />}
+      {bucket && <AgingBucketModal label={bucket.name} bucketKey={bucket.key} bucketKeys={bucket.keys} items={last.ap_items} nameLabel="Vendors" onClose={() => setBucket(null)} />}
     </div>
   );
 }
@@ -750,16 +793,30 @@ function APPage({ daily, openDay }) {
 /* ================= SO / PO transaction page ================= */
 function TxnPage({ title, daily, kindKey, transactions, accent, icon: Icon, onTxnClick }) {
   const [q, setQ] = useState("");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [dayModal, setDayModal] = useState(null); // { date, txns }
   const total = round2(transactions.reduce((s, t) => s + t.amount, 0));
-  const trend = daily.map((d) => ({ date: shortDate(d.date), value: Math.round(d[kindKey + "_total"]), count: d[kindKey + "_count"] }));
+  const trend = daily.map((d) => ({ date: shortDate(d.date), value: Math.round(d[kindKey + "_total"]), rawDate: d.date }));
+  const types = useMemo(() => [...new Set(transactions.map((t) => t.type).filter(Boolean))].sort(), [transactions]);
+
   const filtered = useMemo(() => {
-    if (!q.trim()) return transactions;
-    const s = q.toLowerCase();
-    return transactions.filter((t) => (t.entity || "").toLowerCase().includes(s) || (t.memo || "").toLowerCase().includes(s) || (t.type || "").toLowerCase().includes(s) || (t.num || "").toLowerCase().includes(s));
-  }, [q, transactions]);
+    let rows = transactions;
+    if (typeFilter !== "all") rows = rows.filter((t) => t.type === typeFilter);
+    if (q.trim()) {
+      const s = q.toLowerCase();
+      rows = rows.filter((t) => (t.entity || "").toLowerCase().includes(s) || (t.memo || "").toLowerCase().includes(s) || (t.type || "").toLowerCase().includes(s) || (t.num || "").toLowerCase().includes(s));
+    }
+    return rows;
+  }, [q, typeFilter, transactions]);
 
   if (!daily.length) return <EmptyNote text="No data for this range." />;
   const busiest = daily.reduce((a, b) => (b[kindKey + "_count"] > a[kindKey + "_count"] ? b : a), daily[0]);
+
+  function openDayBar(payload) {
+    const date = payload.rawDate;
+    const txns = transactions.filter((t) => t.date === date);
+    setDayModal({ date, txns });
+  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
@@ -768,7 +825,7 @@ function TxnPage({ title, daily, kindKey, transactions, accent, icon: Icon, onTx
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14 }}>
         <KpiCard label="Total value" value={fmt$(total)} sub={`${transactions.length} transactions`} icon={Icon} accent={accent} />
         <KpiCard label="Average per day" value={fmt$(total / Math.max(1, daily.length))} sub={`across ${daily.length} days`} icon={TrendingUp} accent={GOLD} />
-        <KpiCard label="Busiest day" value={shortDate(busiest.date)} sub={`${busiest[kindKey + "_count"]} transactions`} icon={FileSpreadsheet} accent={BLUE} />
+        <KpiCard label="Busiest day" value={shortDate(busiest.date)} sub={`${busiest[kindKey + "_count"]} transactions`} icon={FileSpreadsheet} accent={BLUE} onClick={() => openDayBar({ rawDate: busiest.date })} />
       </div>
 
       <SectionCard title="Daily transaction value">
@@ -778,25 +835,46 @@ function TxnPage({ title, daily, kindKey, transactions, accent, icon: Icon, onTx
             <XAxis dataKey="date" tick={{ fontSize: 11, fill: SUB }} axisLine={{ stroke: BORDER }} tickLine={false} interval={Math.ceil(trend.length / 15)} />
             <YAxis tick={{ fontSize: 11, fill: SUB }} axisLine={false} tickLine={false} tickFormatter={(v) => "$" + (v / 1000).toFixed(0) + "k"} />
             <Tooltip content={<CustomTooltip />} />
-            <Bar dataKey="value" name="Daily total" fill={accent} radius={[4, 4, 0, 0]} />
+            <Bar dataKey="value" name="Daily total" fill={accent} radius={[4, 4, 0, 0]} cursor="pointer" onClick={(d) => openDayBar(d)} />
           </BarChart>
         </ResponsiveContainer>
+        <div style={{ fontSize: 11.5, color: SUB, marginTop: 4 }}>Click a bar to see that day's transactions</div>
       </SectionCard>
 
       <SectionCard title="All transactions" action={
-        <div style={{ position: "relative" }}>
-          <Search size={14} color={SUB} style={{ position: "absolute", left: 9, top: 8 }} />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search entity, memo, type..." style={{ border: `1px solid ${BORDER}`, borderRadius: 8, padding: "6px 10px 6px 28px", fontSize: 12.5, width: 220, outline: "none" }} />
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} style={{ border: `1px solid ${BORDER}`, borderRadius: 8, padding: "6px 8px", fontSize: 12.5 }}>
+            <option value="all">All types</option>
+            {types.map((t) => <option key={t} value={t}>{t}</option>)}
+          </select>
+          <div style={{ position: "relative" }}>
+            <Search size={14} color={SUB} style={{ position: "absolute", left: 9, top: 8 }} />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search entity, memo, type..." style={{ border: `1px solid ${BORDER}`, borderRadius: 8, padding: "6px 10px 6px 28px", fontSize: 12.5, width: 200, outline: "none" }} />
+          </div>
         </div>
       }>
-        <DataTable pageSize={12} rows={filtered} onRowClick={onTxnClick} columns={[
-          { key: "date", label: "Date", render: (r) => shortDate(r.date) },
-          { key: "entity", label: "Entity", wrap: true },
-          { key: "type", label: "Type", render: (r) => <Pill>{r.type}</Pill> },
+        <DataTable pageSize={12} rows={filtered} onRowClick={onTxnClick} defaultSort={{ key: "date", dir: "desc" }} columns={[
+          { key: "date", label: "Date", sortable: true, sortType: "text", render: (r) => shortDate(r.date) },
+          { key: "entity", label: "Entity", wrap: true, sortable: true, sortType: "text" },
+          { key: "type", label: "Type", sortable: true, sortType: "text", render: (r) => <Pill>{r.type}</Pill> },
           { key: "memo", label: "Memo / reference", wrap: true },
-          { key: "amount", label: "Amount", align: "right", render: (r) => <b>{fmt$2(r.amount)}</b> },
+          { key: "amount", label: "Amount", align: "right", sortable: true, sortType: "number", render: (r) => <b>{fmt$2(r.amount)}</b> },
         ]} />
       </SectionCard>
+
+      {dayModal && (
+        <Modal width={620} onClose={() => setDayModal(null)}>
+          <ModalHeader title={longDate(dayModal.date)} subtitle={`${dayModal.txns.length} transactions`} onClose={() => setDayModal(null)} />
+          <div style={{ padding: "14px 22px 22px" }}>
+            <DataTable pageSize={8} rows={dayModal.txns} onRowClick={(t) => { setDayModal(null); onTxnClick(t); }} defaultSort={{ key: "amount", dir: "desc" }} columns={[
+              { key: "entity", label: "Entity", wrap: true, sortable: true, sortType: "text" },
+              { key: "type", label: "Type", sortable: true, sortType: "text", render: (r) => <Pill>{r.type}</Pill> },
+              { key: "memo", label: "Memo / reference", wrap: true },
+              { key: "amount", label: "Amount", align: "right", sortable: true, sortType: "number", render: (r) => <b>{fmt$2(r.amount)}</b> },
+            ]} />
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
@@ -808,6 +886,7 @@ function ImportPage({ history, onImported }) {
   const [snapDate, setSnapDate] = useState("");
   const [status, setStatus] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [cleanupStatus, setCleanupStatus] = useState(null);
   const fileRef = useRef(null);
   const needsDate = kind === "ar" || kind === "ap";
 
@@ -833,6 +912,24 @@ function ImportPage({ history, onImported }) {
       setBusy(false);
       if (fileRef.current) fileRef.current.value = "";
     }
+  }
+
+  async function deleteHistoryRow(row) {
+    const isSnapshot = row.kind === "ar" || row.kind === "ap";
+    const confirmMsg = isSnapshot
+      ? `Delete "${row.filename}"? This also removes its ${row.kind.toUpperCase()} snapshot data.`
+      : `Delete "${row.filename}" from the log? Note: this removes the log entry only, not the transaction data it added - use "Clean up bad dates" below if this upload contained wrong data.`;
+    if (!window.confirm(confirmMsg)) return;
+    const res = await fetch(`${API}/api/history/${row.id}`, { method: "DELETE" });
+    if (res.ok) onImported();
+  }
+
+  async function runCleanup() {
+    if (!window.confirm("This removes any Sales/Purchase Order records with an implausible date (a sign an AR/AP file was accidentally uploaded as the wrong type). Continue?")) return;
+    const res = await fetch(`${API}/api/cleanup/invalid-dates`, { method: "POST" });
+    const data = await res.json();
+    setCleanupStatus(data.ok ? { ok: true, msg: `Removed ${data.soRemoved} sales order and ${data.poRemoved} purchase order record(s) with invalid dates.` } : { ok: false, msg: "Cleanup failed." });
+    onImported();
   }
 
   return (
@@ -869,8 +966,16 @@ function ImportPage({ history, onImported }) {
         )}
       </SectionCard>
 
-      <SectionCard title="Upload history">
-        {history.length === 0 ? (
+      <SectionCard title="Upload history" action={
+        <button onClick={runCleanup} style={{ border: `1px solid ${BORDER}`, background: "#fff", borderRadius: 8, padding: "6px 10px", fontSize: 12, cursor: "pointer", color: SUB }}>
+          Clean up bad dates
+        </button>
+      }>
+        {cleanupStatus && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 12px", borderRadius: 8, fontSize: 12.5, marginBottom: 12, background: cleanupStatus.ok ? "#EAF3DE" : "#FCEBEB", color: cleanupStatus.ok ? "#27500A" : "#791F1F" }}>
+            {cleanupStatus.ok ? <Check size={14} /> : <AlertTriangle size={14} />}{cleanupStatus.msg}
+          </div>
+        )}        {history.length === 0 ? (
           <EmptyNote text="No files imported yet — anything you upload above will be logged here." />
         ) : (
           <DataTable pageSize={10} rows={history} columns={[
@@ -878,6 +983,11 @@ function ImportPage({ history, onImported }) {
             { key: "filename", label: "File", wrap: true },
             { key: "kind", label: "Type", render: (r) => <Pill>{({ so: "Sales orders", po: "Purchase orders", ar: "AR snapshot", ap: "AP snapshot" })[r.kind] || r.kind}</Pill> },
             { key: "detail", label: "Detail" },
+            { key: "actions", label: "", align: "right", render: (r) => (
+              <button onClick={() => deleteHistoryRow(r)} style={{ border: "none", background: "none", color: RED, cursor: "pointer", fontSize: 12, fontWeight: 600, padding: 0 }}>
+                Delete
+              </button>
+            ) },
           ]} />
         )}
       </SectionCard>
