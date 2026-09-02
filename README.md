@@ -1,207 +1,59 @@
-# V&K Sample Request Portal
+# V&K Group — Financial Dashboard
 
-A web app for submitting vendor sample requests, tracking them on an admin
-dashboard, and generating vendor/notification emails. This version runs as a
-small Node.js server (`server.js`) that serves the app and a JSON API, so
-requests are saved on the server instead of only living in one browser tab.
+A React + Express + SQLite dashboard for tracking sales orders, purchase orders, and accounts receivable / accounts payable snapshots, month over month. Comes pre-loaded with January–July 2026 data:
+- Full sales order and purchase order history for Jan–Jul 2026
+- An accounts receivable and accounts payable snapshot as of July 31, 2026
 
-## What's in this bundle
+January–June don't yet have their own AR/AP snapshots (only July 31 does) — those pages will simply show "no snapshot yet" for those months until you upload one, which is expected.
 
-- `server.js`: the whole backend. Serves the app and two API routes,
-  `POST /api/requests` (save a request) and `GET /api/requests` (list every
-  saved request).
-- `public/index.html`: the whole front end (form, dashboard, email
-  templates), served as a static file by `server.js`.
-- `package.json`: the two dependencies (`express`, `nodemailer`) and the
-  `start` script Render runs.
-- `.env.example`: every environment variable the server understands, with
-  notes on what each one does. None are required to run the app.
-- `.gitignore`: keeps `node_modules`, `.env`, and the saved-requests file out
-  of git.
-- `sheets-mirror/Code.gs`: optional Google Apps Script that mirrors every
-  saved request into a Google Sheet for viewing/filtering. This one doesn't
-  go in the GitHub repo, it gets pasted into the Apps Script editor of the
-  Google Sheet itself (see section 4). Skip it entirely if you don't want a
-  Sheets copy.
-
-## 1. Put it on GitHub
-
-1. Create a new repository on GitHub (Cassie's own account or the New
-   Generation Reps org), for example `vk-sample-request-portal`.
-2. Upload everything in this bundle to the root of that repository:
-   `server.js`, `package.json`, `.gitignore`, `.env.example`, the `public/`
-   folder, and this `README.md`. Drag and drop on the GitHub web UI works
-   fine, or `git add` / `git commit` / `git push` if you're comfortable with
-   git.
-3. Do not upload a `.env` file if you make one for local testing, `.gitignore`
-   already keeps it out, but double check before you push.
-
-## 2. Deploy it on Render
-
-1. In the Render dashboard, click **New > Web Service**.
-2. Connect the GitHub repository you just created.
-3. Set:
-   - **Runtime:** Node
-   - **Build Command:** `npm install`
-   - **Start Command:** `npm start`
-4. Under **Environment Variables**, you don't need to add anything to get
-   the app running and saving requests. Add SMTP variables later (see
-   section 3) once you want the coordinator notification email to send for
-   real.
-5. Click **Create Web Service**. Render builds it and gives you a URL like
-   `https://vk-sample-request-portal.onrender.com`. That's the link you
-   share with the team, it's the whole app, form, dashboard, and email
-   templates, all on one page with tabs.
-
-Once it's live, every submission is saved on the server itself (visible from
-any browser, not just the one that submitted it) instead of just one
-browser tab.
-
-### A note on where requests are saved
-
-By default, `server.js` saves requests to a file called `requests.json`
-sitting next to it on Render's disk. That works, but on Render's free and
-most standard paid web services, that disk is wiped on every redeploy or
-restart, so the saved requests would disappear along with it.
-
-To make the data genuinely durable, add a **Render Disk**:
-
-1. On the Web Service's page, go to **Disks** and click **Add Disk**.
-2. Give it a name, a mount path like `/var/data`, and a size (1 GB is
-   plenty for this).
-3. Add an environment variable `DATA_DIR` set to that same mount path
-   (`/var/data`).
-4. Redeploy. From then on, `requests.json` lives on the Disk, and survives
-   restarts and redeploys.
-
-This is the one setup step worth doing even on a paid plan, a paid web
-service keeps your app running, but only a Disk keeps a specific file from
-being wiped when the service restarts or redeploys.
-
-## 3. Turn on the coordinator notification email
-
-Every submitted request emails Cassandra, Jexy, and Aleyah automatically,
-no matter which rep submitted it, so the coordination team never misses a
-request. The "Also email me a copy?" toggle on the form additionally adds
-the submitter's own "Your Email" address to that same email. This is
-separate from the vendor request email, which is never sent automatically
-by the app or the server, it's always just drafted on the Email Templates
-tab for the coordinator or rep to review and send themselves.
-
-To make this email send for real, add these Environment Variables on the
-Web Service in Render (see `.env.example` for the full list):
-
-- `SMTP_HOST`
-- `SMTP_PORT` (587 for most providers, 465 if your provider requires it)
-- `SMTP_USER`
-- `SMTP_PASS`
-- `SMTP_FROM` (the address the email appears to come from, can be the same
-  as `SMTP_USER`)
-
-Any SMTP provider works. For a Gmail account (for example
-cassandramanliguez215@gmail.com), that's:
-
-- `SMTP_HOST` = `smtp.gmail.com`
-- `SMTP_PORT` = `587`
-- `SMTP_USER` = the Gmail address
-- `SMTP_PASS` = an app password generated at
-  myaccount.google.com/apppasswords (this requires 2-Step Verification to
-  be turned on for that Google account first)
-- `SMTP_FROM` = the same Gmail address
-
-Outlook, SendGrid, Mailgun, and other providers work the same way with
-their own host/port/credentials. Without these set, the app still saves
-every request normally, it just skips sending that email and says so in
-the toast message after you submit.
-
-The list of who always gets notified lives near the top of `server.js` as
-`COORDINATOR_NOTIFY_EMAILS`, ask for an updated file if that list ever
-needs to change.
-
-## 4. Mirror submissions into a Google Sheet (optional)
-
-Render (with the Disk from section 1) is what actually runs the app and
-saves every request, that doesn't change. This step just adds a copy of
-each saved request into a Google Sheet, so you can browse, filter, and
-pivot the data there too, without touching the app itself. If this isn't
-set up, or ever goes down, nothing about the app breaks, submissions just
-won't show up in the Sheet until it's fixed.
-
-### a. Set up the script on the Sheet
-
-1. Open the Google Sheet you want to mirror into.
-2. Go to **Extensions > Apps Script**.
-3. Delete whatever's in the default `Code.gs`, and paste in the contents of
-   `sheets-mirror/Code.gs` from this bundle.
-4. Click the gear icon (**Project Settings**), scroll to **Script
-   Properties**, and add one:
-   - Property: `SECRET_TOKEN`
-   - Value: any random string you make up (mash the keyboard for 20-30
-     characters). Save it, you'll need it again below.
-5. **Deploy > New deployment** > gear icon > **Web app**.
-   - **Execute as:** Me
-   - **Who has access:** Anyone
-   Click **Deploy**, authorize it when Google asks (it needs permission to
-   edit this Sheet), then copy the **Web app URL** it gives you (looks like
-   `https://script.google.com/macros/s/AKfycb.../exec`).
-
-### b. Point Render at it
-
-On the Web Service's page in Render, add two more Environment Variables:
-
-- `SHEETS_MIRROR_URL` = the Web app URL from step 5 above
-- `SHEETS_MIRROR_TOKEN` = the same random string you set as `SECRET_TOKEN`
-
-Redeploy. From then on, every sample request also lands in the Sheet a few
-seconds after it saves on the server, across two tabs that are created
-automatically the first time a request comes in:
-
-- **Requests**: one row per sample request, all the form fields, plus a
-  readable "Vendors" column (e.g. `Ten Strawberry Street (TSS-1001);
-  Vertex China (VC-500)`) so you don't have to open the app to see what's
-  on it.
-- **Vendor Items**: one row per vendor on a request, with that vendor's
-  item numbers, its Status (Ordered, Item Not Available, Out of Stock,
-  Backordered, Received, or Cancelled) and Notes set on the dashboard, and
-  any tracking number/ETA/cost/courier link entered for it. This is what
-  you'd filter or sort by item, status, or tracking number.
-
-Tracking info added later on the dashboard (the "Save" button under a
-vendor's shipment entries) updates that request's rows in both tabs too,
-it's not just a one-time snapshot from when the request was first
-submitted.
-
-If `Code.gs` is ever edited later, a **new deployment version** is needed
-for the change to go live: **Deploy > Manage deployments > pencil icon >
-Version: New version > Deploy**. Editing the script alone doesn't update
-the URL that's already saved in Render.
-
-## What's not automatic, on purpose
-
-- **Vendor request emails are never sent by the app.** Every submission
-  auto-generates a professional, fully-populated draft on the Email
-  Templates tab, addressed to the coordinator with the vendor's real email
-  shown as "Forward to vendor at:". After submitting, you're taken straight
-  to that tab. Click **Open in Email App** to open the draft in your own
-  email client, review it, and send it (or forward it) to the vendor
-  yourself.
-- **The vendor catalog is baked into `public/index.html`.** To add or edit a
-  vendor later, either ask for an updated file, or edit the
-  `VENDOR_CATALOG` / `VENDOR_EMAILS` list near the top of the `<script>`
-  section directly.
-- **There's no login or access control.** Anyone with the Render link can
-  submit a request and see the dashboard. If that becomes a concern, Render
-  supports adding basic auth or an allowlist in front of a Web Service, ask
-  if you'd like that set up.
-
-## Local testing (optional)
-
-If you want to try it on your own machine before pushing to GitHub:
+## How it's structured
 
 ```
-npm install
-npm start
+vk-dashboard/
+  client/     React + Vite frontend (the dashboard UI)
+  server/     Express API + SQLite database
 ```
 
-Then open `http://localhost:3000` in a browser. Requests you submit locally
-are saved to `requests.json` in this folder.
+The frontend talks to the backend over a small API (`/api/months`, `/api/month/:key`, `/api/upload`, `/api/history`). In production, the Express server also serves the built frontend, so it deploys as a single Render web service.
+
+## Running it locally (optional, only if you want to test before deploying)
+
+```
+cd server && npm install && npm start
+```
+In a second terminal:
+```
+cd client && npm install && npm run dev
+```
+Open the URL Vite prints (usually `http://localhost:5173`).
+
+## Putting it on GitHub
+
+1. Create a new empty repository on GitHub (no README/license, so there's nothing to conflict with).
+2. Using GitHub's web interface: upload this whole `vk-dashboard` folder — drag all the files/folders in, including the `client` and `server` folders — using "Add file" → "Upload files". GitHub does support uploading nested folders by dragging them in as a group.
+3. Commit directly to `main`.
+
+## Deploying on Render
+
+1. In Render, choose **New → Web Service** and connect the GitHub repo you just created.
+2. Settings:
+   - **Environment:** Node
+   - **Build command:** `npm run build`
+   - **Start command:** `npm start`
+3. **Persistent Disk (important):** SQLite writes to a file on disk. Render's web services have an *ephemeral* filesystem by default — anything written to disk is wiped on every redeploy. To keep your uploaded data permanently:
+   - Add a **Persistent Disk** to the service (Render dashboard → your service → Disks).
+   - Mount it at, say, `/data`.
+   - Add an environment variable `DB_PATH` = `/data/dashboard.db`.
+   Without this step, the dashboard will still work, but a redeploy will reset it back to the seeded July data.
+4. Deploy. Render will run the build, then start the server, which serves the dashboard at your Render URL.
+
+## Updating going forward
+
+No redeploy needed for new data — just open the dashboard's **Import data** page and upload:
+- the new month's sales orders file (master file, whole month)
+- the new month's purchase orders file (master file, whole month)
+- an AR snapshot and an AP snapshot, each tagged with whatever date they're "as of"
+
+AR and AP are point-in-time balance reports, not transaction logs — each upload just adds (or replaces, if you re-upload the same date) one snapshot on the calendar. You don't need one per day; upload as often as makes sense for your reporting cadence (monthly, weekly, or ad hoc), and the trend charts and aging views will reflect whatever snapshots exist.
+
+The month selector at the top of the dashboard will automatically pick up new months as they're uploaded.
